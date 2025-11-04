@@ -1,0 +1,454 @@
+<!DOCTYPE html><html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Jogo Floresta - Controles Corrigidos com Rotação</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+    canvas { display: block; }/* Menu fixo - canto superior esquerdo (estilo Roblox) */
+.music-menu {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 320px;
+  padding: 12px;
+  border-radius: 10px;
+  z-index: 200;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  color: white;
+}
+
+.music-menu .controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  backdrop-filter: blur(3px);
+  background: rgba(0,0,0,0.35);
+  padding: 8px;
+  border-radius: 8px;
+  width: 100%;
+}
+
+.music-menu button {
+  background: rgba(255,255,255,0.06);
+  border: none;
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.music-menu select, .music-menu input[type="range"] {
+  cursor: pointer;
+}
+
+.music-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  width: 100%;
+}
+
+.music-title {
+  font-weight: bold;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+}
+
+.music-sub {
+  opacity: 0.9;
+}
+
+.small { font-size: 12px; opacity: 0.9; }
+
+@media (max-width: 420px) {
+  .music-menu { width: calc(100% - 20px); left: 10px; right: 10px; }
+}
+
+  </style>
+</head>
+<body>
+  <!-- Menu fixo (canto superior esquerdo) -->
+  <div id="musicMenu" class="music-menu" style="background-image: url('https://github.com/sfliick77/Images-texturas-/raw/main/5c68de175feb85515214601b456a7611.jpg')">
+    <div class="controls">
+      <button id="playPauseBtn">⏸</button>
+      <div class="music-info">
+        <div class="music-title">Floresta Relaxante</div>
+        <div class="music-sub small">Selecione a trilha e ajuste o volume</div>
+        <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+          <select id="musicSelect" class="small">
+            <option value="https://github.com/sfliick77/M-sica-tycon/raw/main/20%20minutes%20and%2050%20seconds%20of%20nostalgic%20roblox%20songs(MP3_160K).mp3">Música 1 — Nostalgic Roblox Songs</option>
+            <option value="https://github.com/sfliick77/Relaxed-scene/raw/main/Relaxed%20Scene(MP3_160K).mp3">Música 2 — Relaxed Scene</option>
+          </select>
+          <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.5">
+        </div>
+      </div>
+    </div>
+  </div>  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>  <script>
+    // ----------------------
+    // Áudio (música 1 por padrão)
+    // ----------------------
+    const musicUrls = {
+      music1: 'https://github.com/sfliick77/M-sica-tycon/raw/main/20%20minutes%20and%2050%20seconds%20of%20nostalgic%20roblox%20songs(MP3_160K).mp3',
+      music2: 'https://github.com/sfliick77/Relaxed-scene/raw/main/Relaxed%20Scene(MP3_160K).mp3'
+    };
+
+    const audio = new Audio(musicUrls.music1);
+    audio.loop = true;
+    audio.volume = 0.5;
+    let isPlaying = false;
+
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const musicSelect = document.getElementById('musicSelect');
+
+    // Função para tocar o áudio (respeitando bloqueios do navegador)
+    function tryPlayAudio() {
+      audio.play().then(() => {
+        isPlaying = true;
+        playPauseBtn.textContent = '⏸';
+      }).catch(e => {
+        // reprodução bloqueada até interação; manter botão como play se necessário
+        isPlaying = false;
+        playPauseBtn.textContent = '▶';
+        console.log('Reprodução automática bloqueada:', e);
+      });
+    }
+
+    // Inicia música padrão quando houver qualquer interação do usuário
+    function initAudioOnce() {
+      tryPlayAudio();
+      document.removeEventListener('keydown', initAudioOnce);
+      document.removeEventListener('click', initAudioOnce);
+    }
+    document.addEventListener('keydown', initAudioOnce, { once: true });
+    document.addEventListener('click', initAudioOnce, { once: true });
+
+    playPauseBtn.addEventListener('click', () => {
+      if (isPlaying) {
+        audio.pause();
+        playPauseBtn.textContent = '▶';
+      } else {
+        tryPlayAudio();
+      }
+      isPlaying = !isPlaying;
+    });
+
+    volumeSlider.addEventListener('input', () => {
+      audio.volume = volumeSlider.value;
+    });
+
+    musicSelect.addEventListener('change', () => {
+      const wasPlaying = isPlaying;
+      const selected = musicSelect.value;
+      audio.pause();
+      audio.src = selected;
+      audio.load();
+      // se estava tocando, tenta continuar tocando com a nova música
+      if (wasPlaying) {
+        tryPlayAudio();
+      }
+    });
+
+    // ----------------------
+    // Three.js - cena básica + floresta
+    // ----------------------
+    const scene = new THREE.Scene();
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Céu (mesma textura do original)
+    const textureLoader = new THREE.TextureLoader();
+    const skyTexture = textureLoader.load('https://github.com/sfliick77/Background-c-u/raw/main/277fba7bc86484d9f6cf37c87ee44de2.jpg');
+    skyTexture.wrapS = THREE.RepeatWrapping;
+    skyTexture.wrapT = THREE.RepeatWrapping;
+    const skyGeometry = new THREE.SphereGeometry(1500, 32, 32);
+    const skyMaterial = new THREE.MeshBasicMaterial({ map: skyTexture, side: THREE.BackSide });
+    const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+    scene.add(sky);
+
+    // Luz
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(50, 100, 50).normalize();
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0x666666));
+
+    // Chão com textura de grama (mesma que você forneceu)
+    const groundTexture = textureLoader.load('https://github.com/sfliick77/Images-texturas-/raw/main/grama_sintetica_30mm_1x5m_abrolhos_sporty_naterial_92278144_01ad_600x600.jpg');
+    groundTexture.wrapS = groundTexture.wrapT = THREE.RepeatWrapping;
+    groundTexture.repeat.set(30, 30);
+    groundTexture.anisotropy = 16;
+
+    const groundGeo = new THREE.PlaneGeometry(2000, 2000);
+    const groundMat = new THREE.MeshLambertMaterial({ map: groundTexture });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // Jogadores (mantidos iguais)
+    const player1 = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20), new THREE.MeshLambertMaterial({ color: 0xff0000 }));
+    const player2 = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20), new THREE.MeshLambertMaterial({ color: 0x0000ff }));
+    player1.position.set(-50, 10, 0);
+    player2.position.set(50, 10, 0);
+    player1.userData.velocity = new THREE.Vector3(0, 0, 0);
+    player2.userData.velocity = new THREE.Vector3(0, 0, 0);
+    player1.userData.onGround = true;
+    player2.userData.onGround = true;
+    player1.userData.direction = new THREE.Vector3(0, 0, -1);
+    player2.userData.direction = new THREE.Vector3(0, 0, -1);
+    scene.add(player1);
+    scene.add(player2);
+
+    // Cria muitas árvores simples espalhadas pela floresta
+    function criarArvore(x, z) {
+      // Tronco
+      const trunkGeo = new THREE.CylinderGeometry(4, 4, 40, 8);
+      const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b3e1a });
+      const tronco = new THREE.Mesh(trunkGeo, trunkMat);
+      tronco.position.set(x, 20, z);
+      scene.add(tronco);
+
+      // Copa (esfera para simplicidade)
+      const leavesGeo = new THREE.SphereGeometry(18, 12, 12);
+      const leavesMat = new THREE.MeshLambertMaterial({ color: 0x1f8a1f });
+      const copa = new THREE.Mesh(leavesGeo, leavesMat);
+      copa.position.set(x, 42, z);
+      scene.add(copa);
+
+      return { tronco, copa };
+    }
+
+    // Gera árvores distribuídas (evita spawn muito perto do centro inicial)
+    const treeCount = 160;
+    const boundary = 900;
+    for (let i = 0; i < treeCount; i++) {
+      let x = Math.random() * 2 * boundary - boundary;
+      let z = Math.random() * 2 * boundary - boundary;
+      // evita spawn muito próximo do centro onde players começam
+      if (Math.abs(x) < 150 && Math.abs(z) < 150) {
+        x += (Math.random() > 0.5 ? 1 : -1) * 200;
+        z += (Math.random() > 0.5 ? 1 : -1) * 200;
+      }
+      criarArvore(x, z);
+    }
+
+    // Obstáculos (mantidos, mas agora parecem no meio da floresta)
+    function criarObstaculo(x, z) {
+      const obs = new THREE.Mesh(new THREE.BoxGeometry(50, 50, 50), new THREE.MeshLambertMaterial({ color: 0x5555ff }));
+      obs.position.set(x, 25, z);
+      scene.add(obs);
+      return obs;
+    }
+    const obstaculos = [
+      criarObstaculo(0, 300),
+      criarObstaculo(-200, -200),
+      criarObstaculo(300, -100)
+    ];
+
+    // Bola com física melhorada (mantida)
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(30, 32, 32), new THREE.MeshLambertMaterial({ color: 0xffff00 }));
+    ball.position.set(0, 30, 0);
+    scene.add(ball);
+    ball.userData.velocity = new THREE.Vector3(0, 0, 0);
+    ball.userData.angularVelocity = new THREE.Vector3(0, 0, 0);
+
+    // Câmeras estilo Roblox (split-screen)
+    const camera1 = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight/2), 0.1, 2000);
+    const camera2 = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight/2), 0.1, 2000);
+
+    // Controles de teclado
+    const keys = {};
+    window.addEventListener("keydown", (e) => { 
+      keys[e.key] = true; 
+      if([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+    window.addEventListener("keyup", (e) => { keys[e.key] = false; });
+
+    const speed = 25; // reduzida para movimento mais controlável
+    const jumpForce = 50;
+    const gravity = 0.8;
+
+    function movePlayers(delta) {
+      // Player 1
+      if (keys["w"]) {
+        player1.userData.velocity.z = -speed;
+        player1.userData.direction.set(0, 0, -1);
+      } else if (keys["s"]) {
+        player1.userData.velocity.z = speed;
+        player1.userData.direction.set(0, 0, 1);
+      } else {
+        player1.userData.velocity.z = 0;
+      }
+      if (keys["a"]) {
+        player1.userData.velocity.x = -speed;
+        player1.userData.direction.set(-1, 0, 0);
+      } else if (keys["d"]) {
+        player1.userData.velocity.x = speed;
+        player1.userData.direction.set(1, 0, 0);
+      } else {
+        player1.userData.velocity.x = 0;
+      }
+      if (keys["w"] && keys["a"]) player1.userData.direction.set(-0.7, 0, -0.7);
+      if (keys["w"] && keys["d"]) player1.userData.direction.set(0.7, 0, -0.7);
+      if (keys["s"] && keys["a"]) player1.userData.direction.set(-0.7, 0, 0.7);
+      if (keys["s"] && keys["d"]) player1.userData.direction.set(0.7, 0, 0.7);
+      if (keys[" "] && player1.userData.onGround) {
+        player1.userData.velocity.y = jumpForce;
+        player1.userData.onGround = false;
+      }
+
+      // Player 2
+      if (keys["ArrowUp"]) {
+        player2.userData.velocity.z = -speed;
+        player2.userData.direction.set(0, 0, -1);
+      } else if (keys["ArrowDown"]) {
+        player2.userData.velocity.z = speed;
+        player2.userData.direction.set(0, 0, 1);
+      } else {
+        player2.userData.velocity.z = 0;
+      }
+      if (keys["ArrowLeft"]) {
+        player2.userData.velocity.x = -speed;
+        player2.userData.direction.set(-1, 0, 0);
+      } else if (keys["ArrowRight"]) {
+        player2.userData.velocity.x = speed;
+        player2.userData.direction.set(1, 0, 0);
+      } else {
+        player2.userData.velocity.x = 0;
+      }
+      if (keys["ArrowUp"] && keys["ArrowLeft"]) player2.userData.direction.set(-0.7, 0, -0.7);
+      if (keys["ArrowUp"] && keys["ArrowRight"]) player2.userData.direction.set(0.7, 0, -0.7);
+      if (keys["ArrowDown"] && keys["ArrowLeft"]) player2.userData.direction.set(-0.7, 0, 0.7);
+      if (keys["ArrowDown"] && keys["ArrowRight"]) player2.userData.direction.set(0.7, 0, 0.7);
+      if (keys["Enter"] && player2.userData.onGround) {
+        player2.userData.velocity.y = jumpForce;
+        player2.userData.onGround = false;
+      }
+
+      // gravidade
+      player1.userData.velocity.y -= gravity;
+      player2.userData.velocity.y -= gravity;
+
+      // atualiza posições
+      player1.position.add(player1.userData.velocity.clone().multiplyScalar(delta));
+      player2.position.add(player2.userData.velocity.clone().multiplyScalar(delta));
+
+      // rotaciona jogadores
+      if (player1.userData.velocity.x !== 0 || player1.userData.velocity.z !== 0) {
+        player1.rotation.y = Math.atan2(player1.userData.direction.x, player1.userData.direction.z);
+      }
+      if (player2.userData.velocity.x !== 0 || player2.userData.velocity.z !== 0) {
+        player2.rotation.y = Math.atan2(player2.userData.direction.x, player2.userData.direction.z);
+      }
+
+      // colisão simples com chão
+      if (player1.position.y <= 10) {
+        player1.position.y = 10;
+        player1.userData.velocity.y = 0;
+        player1.userData.onGround = true;
+      }
+      if (player2.position.y <= 10) {
+        player2.position.y = 10;
+        player2.userData.velocity.y = 0;
+        player2.userData.onGround = true;
+      }
+    }
+
+    // Colisão com a bola
+    function checkBallCollision(player, delta) {
+      const dist = player.position.distanceTo(ball.position);
+      const combinedRadius = 15 + 30;
+      if (dist < combinedRadius) {
+        const pushDir = new THREE.Vector3().subVectors(ball.position, player.position).normalize();
+        const playerSpeed = player.userData.velocity.length();
+        const force = 5 + playerSpeed * 0.5;
+        ball.userData.velocity.add(pushDir.multiplyScalar(force));
+        const rotationForce = new THREE.Vector3(-pushDir.z * force * 0.01, 0, pushDir.x * force * 0.01);
+        ball.userData.angularVelocity.add(rotationForce);
+      }
+    }
+
+    function updateBall(delta) {
+      ball.userData.velocity.x *= 0.98;
+      ball.userData.velocity.z *= 0.98;
+      ball.userData.angularVelocity.multiplyScalar(0.95);
+      ball.userData.velocity.y -= gravity * 0.5;
+      ball.position.add(ball.userData.velocity.clone().multiplyScalar(delta));
+      ball.rotation.x += ball.userData.angularVelocity.x;
+      ball.rotation.z += ball.userData.angularVelocity.z;
+      if (ball.position.y <= 30) {
+        ball.position.y = 30;
+        ball.userData.velocity.y *= -0.7;
+        ball.userData.velocity.x *= 0.9;
+        ball.userData.velocity.z *= 0.9;
+      }
+      const boundary = 900;
+      if (ball.position.x > boundary || ball.position.x < -boundary) {
+        ball.userData.velocity.x *= -0.8;
+        ball.position.x = THREE.MathUtils.clamp(ball.position.x, -boundary, boundary);
+      }
+      if (ball.position.z > boundary || ball.position.z < -boundary) {
+        ball.userData.velocity.z *= -0.8;
+        ball.position.z = THREE.MathUtils.clamp(ball.position.z, -boundary, boundary);
+      }
+    }
+
+    function updateCameras() {
+      const cameraDistance = 50;
+      const cameraHeight = 30;
+      const player1Direction = new THREE.Vector3(Math.sin(player1.rotation.y), 0, Math.cos(player1.rotation.y));
+      camera1.position.set(player1.position.x - player1Direction.x * cameraDistance, player1.position.y + cameraHeight, player1.position.z - player1Direction.z * cameraDistance);
+      camera1.lookAt(player1.position.x, player1.position.y + 10, player1.position.z);
+      const player2Direction = new THREE.Vector3(Math.sin(player2.rotation.y), 0, Math.cos(player2.rotation.y));
+      camera2.position.set(player2.position.x - player2Direction.x * cameraDistance, player2.position.y + cameraHeight, player2.position.z - player2Direction.z * cameraDistance);
+      camera2.lookAt(player2.position.x, player2.position.y + 10, player2.position.z);
+    }
+
+    let clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.1);
+      movePlayers(delta);
+      checkBallCollision(player1, delta);
+      checkBallCollision(player2, delta);
+      updateBall(delta);
+      updateCameras();
+
+      // Render Player 1
+      renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
+      renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+      renderer.setScissorTest(true);
+      renderer.render(scene, camera1);
+
+      // Render Player 2
+      renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+      renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+      renderer.setScissorTest(true);
+      renderer.render(scene, camera2);
+    }
+    animate();
+
+    // Responsividade
+    window.addEventListener("resize", () => {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      camera1.aspect = (window.innerWidth/2) / window.innerHeight;
+      camera2.aspect = (window.innerWidth/2) / window.innerHeight;
+      camera1.updateProjectionMatrix();
+      camera2.updateProjectionMatrix();
+    });
+
+  </script></body>
+</html>
